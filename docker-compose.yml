@@ -1,0 +1,100 @@
+
+name: securecloud
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-securecloud}
+      POSTGRES_USER: ${DB_USERNAME:-securecloud}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      TZ: Asia/Kolkata
+    volumes:
+      - securecloud-postgres-data:/var/lib/postgresql/data
+    networks:
+      - securecloud-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  metadata-server:
+    build:
+      context: .
+      dockerfile: metadata-server/Dockerfile
+    environment:
+      SERVER_PORT: 8080
+      DB_URL: "jdbc:postgresql://postgres:5432/securecloud?options=-c%20TimeZone%3DAsia%2FKolkata"
+      DB_USERNAME: ${DB_USERNAME:-securecloud}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      TZ: Asia/Kolkata
+    ports:
+      - "8080:8080"
+    networks:
+      - securecloud-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  storage-node-1:
+    build:
+      context: .
+      dockerfile: storage-node/Dockerfile
+    environment:
+      SERVER_PORT: 8081
+      TZ: Asia/Kolkata
+    ports:
+      - "8081:8081"
+    volumes:
+      - storage-node-1-data:/var/lib/securecloud/storage
+    networks:
+      - securecloud-internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  storage-node-2:
+    build:
+      context: .
+      dockerfile: storage-node/Dockerfile
+    environment:
+      SERVER_PORT: 8081
+      TZ: Asia/Kolkata
+    ports:
+      - "8082:8081"
+    volumes:
+      - storage-node-2-data:/var/lib/securecloud/storage
+    networks:
+      - securecloud-internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
+  securecloud-internal:
+    driver: bridge
+
+volumes:
+  securecloud-postgres-data:
+    external: true
+    name: securecloud-postgres-data
+  storage-node-1-data:
+  storage-node-2-data:
